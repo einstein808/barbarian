@@ -16,11 +16,17 @@ Um jogo estilo Vampire Survivors feito com PIXI.js, onde você controla um perso
 ---
 ## Como rodar localmente
 1. Clone ou baixe este repositório
+
 git clone https://github.com/seuusuario/PIXIJS-Survivors.git
+
 cd barbarian
+
 2. Inicie um servidor HTTP local na pasta do projeto
+
 npx http-server
+
 3. Acesse o jogo
+
 o CMD irá retornar alguns endereços locais, basta acessar um deles e jogar!
 ---
 ## Como jogar
