@@ -55,6 +55,8 @@ const MAX_LEVEL = 13;
 // projectile firing control (so powerups can change rate)
 let projectileRate = 300; // ms
 let projectileTimer = null;
+// projectiles enabled toggle — set to false to remove flying arrows
+let projectilesEnabled = false;
 let powerupTimer = null;
 
 // powerup effect state
@@ -292,14 +294,26 @@ const replayBtn = createButton("🔄 Jogar Novamente", GAME_HEIGHT / 2 + 100, ()
 gameOverContainer.addChild(replayBtn);
 
 
-PIXI.Assets.load([
+// Build load list including elf frames (7 actions x 10 frames)
+const baseAssets = [
     "sprites/background.png",
     "sprites/inimigos.png",
     "sprites/obstaculo.png",
     "sprites/projetil.png",
     "sprites/protag.png",
-    "sprites/powerups.png"
-]).then(initGame);
+    "sprites/powerups.png",
+];
+
+// list elf frames programmatically
+const elfActions = ['ATTACK','DIE','HURT','IDLE','JUMP','RUN','WALK'];
+for (const a of elfActions) {
+    for (let i = 0; i < 10; i++) {
+        const f = String(i).padStart(3,'0');
+        baseAssets.push(`sprites/elf/Elf_01__${a}_${f}.png`);
+    }
+}
+
+PIXI.Assets.load(baseAssets).then(initGame);
 
 let assetsLoaded = false;
 
@@ -348,17 +362,51 @@ function initGame() {
     bg.scale.set(1.0);
     gameContainer.addChild(bg);
 
-    const texProtag = PIXI.Texture.from("sprites/protag.png");
-    player = new PIXI.Sprite(texProtag);
+    // Create animated player (elf) using the preloaded frames
+    const playerAnims = {};
+    for (const act of elfActions) {
+        const arr = [];
+        for (let i = 0; i < 10; i++) {
+            const f = String(i).padStart(3, '0');
+            arr.push(PIXI.Texture.from(`sprites/elf/Elf_01__${act}_${f}.png`));
+        }
+        playerAnims[act] = arr;
+    }
+
+    // default to IDLE animation frames
+    player = new PIXI.AnimatedSprite(playerAnims['IDLE']);
+    player.animationSpeed = 0.12;
     player.anchor.set(0.5);
-    player.scale.set(0.45);
+    player.scale.set(0.35);
     player.baseSpeed = 4;
     player.speed = player.baseSpeed;
     player.worldX = 0;
     player.worldY = 0;
     player.hp = 100;
     player.shield = false;
+    player.currentAnim = 'IDLE';
+    player.play();
+    // approx player collision radius
+    try { player.radius = Math.max(14, (player.textures[0].width || 80) * player.scale.x * 0.42); } catch (e) { player.radius = 20; }
     gameContainer.addChild(player);
+
+    // helper to switch animations cleanly
+    function playPlayerAnim(name, loop = true) {
+        if (!player || player.currentAnim === name) return;
+        const tex = playerAnims[name];
+        if (!tex) return;
+        player.textures = tex;
+        player.loop = !!loop;
+        // tweak speed for run/attack
+        if (name === 'RUN' || name === 'WALK') player.animationSpeed = 0.18;
+        else if (name === 'ATTACK') player.animationSpeed = 0.28;
+        else player.animationSpeed = 0.12;
+        player.play();
+        player.currentAnim = name;
+    }
+
+    // expose to outer scope for other game logic
+    player.playAnim = playPlayerAnim;
 
     const texEnemies = PIXI.Texture.from("sprites/inimigos.png");
     const texObstacle = PIXI.Texture.from("sprites/obstaculo.png");
@@ -414,6 +462,13 @@ function initGame() {
         e.hp = 10 + difficulty * 4 + currentLevel * 2 + type * 2;
         e.damage = 1 + Math.floor(currentLevel / 3) + type;
 
+        // compute approximate collision radius for the enemy using frame width and scale
+        try {
+            e.radius = Math.max(14, (ENEMY_FRAME_W * e.scale.x) * 0.45);
+        } catch (err) {
+            e.radius = 18;
+        }
+
         enemies.push(e);
         gameContainer.addChild(e);
     }
@@ -444,6 +499,7 @@ function initGame() {
     }
 
     function fireProjectile() {
+        if (!projectilesEnabled) return; // disabled by user request
         if (currentState !== STATE.PLAYING) return;
 
         const target = getClosestEnemy();
@@ -476,9 +532,81 @@ function initGame() {
         p.vy = vy;
         p.life = 90;
         p.damage = 5 + (activePowerups.damage.active ? activePowerups.damage.extra : 0);
+        // approximate collision radius based on texture size and scale
+        try { p.radius = Math.max(6, (texProjectile.width || 32) * p.scale.x * 0.45); } catch (err) { p.radius = 8; }
 
         projectiles.push(p);
         gameContainer.addChild(p);
+
+        // trigger attack animation on player (one-shot) then resume movement anim
+        try {
+            if (player && player.playAnim) {
+                player.playAnim('ATTACK', false);
+                player.onComplete = () => {
+                    // resume appropriate animation
+                    const movingNow = keys["w"] || keys["a"] || keys["s"] || keys["d"] || keys["arrowup"] || keys["arrowleft"] || keys["arrowdown"] || keys["arrowright"];
+                    if (movingNow) player.playAnim('RUN', true);
+                    else player.playAnim('IDLE', true);
+                    player.onComplete = null;
+                };
+            }
+        } catch (e) { }
+    }
+
+    // manual fire used by player (space key) - always allowed
+    function playerManualFire() {
+        if (!player) return;
+
+        // find target (closest enemy) or shoot forward random direction
+        const target = getClosestEnemy();
+
+        let ang, vx, vy;
+        if (!target) {
+            ang = Math.random() * Math.PI * 2;
+            vx = Math.cos(ang) * 10;
+            vy = Math.sin(ang) * 10;
+        } else {
+            const dx = target.worldX - player.worldX;
+            const dy = target.worldY - player.worldY;
+            ang = Math.atan2(dy, dx);
+            const d = Math.hypot(dx, dy) || 1;
+            vx = dx / d * 10;
+            vy = dy / d * 10;
+        }
+
+        const p = new PIXI.Sprite(texProjectile);
+        p.anchor.set(0.5);
+        // spawn scale animation
+        p.scale.set(0);
+        p.targetScale = 0.28;
+        p.spawnTime = performance.now();
+        p.spawnDuration = 220;
+        p.rotation = ang;
+
+        p.worldX = player.worldX;
+        p.worldY = player.worldY;
+
+        p.vx = vx;
+        p.vy = vy;
+        p.life = 180;
+        p.damage = 8 + (activePowerups.damage.active ? activePowerups.damage.extra : 0);
+        try { p.radius = Math.max(6, (texProjectile.width || 32) * 0.28 * 0.45); } catch (err) { p.radius = 8; }
+
+        projectiles.push(p);
+        gameContainer.addChild(p);
+
+        // short shoot feedback — player attack anim
+        try {
+            if (player && player.playAnim) {
+                player.playAnim('ATTACK', false);
+                player.onComplete = () => {
+                    const movingNow = keys["w"] || keys["a"] || keys["s"] || keys["d"];
+                    if (movingNow) player.playAnim('RUN', true);
+                    else player.playAnim('IDLE', true);
+                    player.onComplete = null;
+                };
+            }
+        } catch (e) {}
     }
 
     gameData = {
@@ -490,7 +618,11 @@ function initGame() {
     };
 
     function updateProjectileInterval() {
-        if (projectileTimer) clearInterval(projectileTimer);
+        if (projectileTimer) {
+            clearInterval(projectileTimer);
+            projectileTimer = null;
+        }
+        if (!projectilesEnabled) return; // do not start interval if projectiles are disabled
         projectileTimer = setInterval(() => {
             if (currentState === STATE.PLAYING) gameData.fireProjectile();
         }, Math.max(50, projectileRate * (activePowerups.rapid.active ? activePowerups.rapid.factor : 1)));
@@ -551,6 +683,8 @@ function resetGame() {
     player.worldY = 0;
     player.speed = player.baseSpeed;
     player.shield = false;
+    // reset player animation
+    try { if (player && player.playAnim) { player.playAnim('IDLE', true); player.onComplete = null; } } catch(e) {}
 
     // remove all entities from stage
     for (const e of enemies) gameContainer.removeChild(e);
@@ -606,6 +740,22 @@ const keys = {};
 window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
+// player manual fire cooldown
+let lastShotTime = 0;
+const shotCooldown = 220; // ms
+
+// space -> fire once (manual fire) regardless of projectilesEnabled
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        // prevent repeat rapid-fire on holding space (cooldown)
+        const now = performance.now();
+        if (now - lastShotTime < shotCooldown) return;
+        lastShotTime = now;
+        // call custom player fire which always creates a projectile
+        playerManualFire();
+    }
+});
+
 app.ticker.add(() => {
     if (currentState !== STATE.PLAYING) return;
 
@@ -625,6 +775,14 @@ app.ticker.add(() => {
         player.worldX += dx * player.speed;
         player.worldY += dy * player.speed;
     }
+
+    // player animation based on movement, but don't interrupt ATTACK or DIE
+    try {
+        if (player && player.playAnim && player.currentAnim !== 'ATTACK' && player.currentAnim !== 'DIE') {
+            if (moving && player.currentAnim !== 'RUN') player.playAnim('RUN', true);
+            if (!moving && player.currentAnim !== 'IDLE') player.playAnim('IDLE', true);
+        }
+    } catch(e) {}
 
     for (const o of obstacles) {
         const hw = o.size / 2;
@@ -694,8 +852,9 @@ app.ticker.add(() => {
         e.worldX += (steerX / slen) * e.baseSpeed;
         e.worldY += (steerY / slen) * e.baseSpeed;
 
-        // contact with player
-        if (d < 28) {
+        // contact with player (use radii)
+        const playerR = player && player.radius ? player.radius : 20;
+        if (d < ((e.radius || 18) + playerR)) {
             // apply damage once per tick while in range
             if (!player.shield) player.hp -= 0.08 * e.damage;
         }
@@ -724,6 +883,15 @@ app.ticker.add(() => {
     for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
 
+        // animate spawn scale if present
+        if (p.spawnTime) {
+            const t = Math.min(1, (performance.now() - p.spawnTime) / (p.spawnDuration || 220));
+            const eased = 1 - Math.pow(1 - t, 3);
+            const s = (p.targetScale || 0.28) * eased;
+            p.scale.set(s);
+            if (t >= 1) delete p.spawnTime;
+        }
+
         p.worldX += p.vx;
         p.worldY += p.vy;
         p.life--;
@@ -734,7 +902,10 @@ app.ticker.add(() => {
             const hw = o.size / 2;
             const cx = Math.max(o.worldX - hw, Math.min(p.worldX, o.worldX + hw));
             const cy = Math.max(o.worldY - hw, Math.min(p.worldY, o.worldY + hw));
-            if ((p.worldX - cx) ** 2 + (p.worldY - cy) ** 2 < 10 * 10) {
+            // use projectile radius for obstacle collision
+            const ddx = p.worldX - cx;
+            const ddy = p.worldY - cy;
+            if ((ddx * ddx + ddy * ddy) < (p.radius || 10) * (p.radius || 10)) {
                 destroy = true;
                 break;
             }
@@ -742,8 +913,10 @@ app.ticker.add(() => {
 
         if (!destroy) {
             for (const e of enemies) {
-                if (Math.hypot(p.worldX - e.worldX, p.worldY - e.worldY) < 28) {
-                    e.hp -= 10;
+                const dist = Math.hypot(p.worldX - e.worldX, p.worldY - e.worldY);
+                const er = e.radius || 18;
+                if (dist < ((p.radius || 8) + er)) {
+                    e.hp -= (p.damage || 5);
                     destroy = true;
                     break;
                 }
@@ -865,6 +1038,20 @@ app.ticker.add(() => {
     scoreText.text = `Score: ${Math.floor(score)}`;
 
     if (player.hp <= 0) {
-        switchToState(STATE.GAMEOVER);
+        // play DIE animation then go to gameover
+        try {
+            if (player && player.playAnim && player.currentAnim !== 'DIE') {
+                player.playAnim('DIE', false);
+                player.onComplete = () => {
+                    player.onComplete = null;
+                    switchToState(STATE.GAMEOVER);
+                };
+            } else if (player && player.currentAnim === 'DIE' && !player.playing) {
+                // guarantee fallback
+                switchToState(STATE.GAMEOVER);
+            }
+        } catch (e) {
+            switchToState(STATE.GAMEOVER);
+        }
     }
 });
