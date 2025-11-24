@@ -1,204 +1,591 @@
-<!doctype html>
-<html lang="pt-BR">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Vampire Survivor - Base (PixiJS)</title>
-  <style>
-    html,body { margin:0; padding:0; overflow:hidden; background:#111; }
-    #game { width:1280px; height:720px; margin:0 auto; display:block; }
-  </style>
-  <script src="https://pixijs.download/release/pixi.min.js"></script>
+<meta charset="UTF-8" />
+<title>PIXIJS Survivors</title>
+<style>
+    body {
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+        font-family: Arial, sans-serif;
+    }
+    canvas {
+        display: block;
+        margin: 0 auto;
+    }
+</style>
 </head>
 <body>
-<div id="game"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+
 <script>
-// Single-file PixiJS base with continuous map, obstacles, enemies, scaling
-const app = new PIXI.Application();
-app.init({ width:1280, height:720, background:'#0b0b0b', antialias:true })
-  .then(startGame)
-  .catch(err => console.error('PIXI init failed', err));
+const GAME_WIDTH = 1280;
+const GAME_HEIGHT = 720;
 
-function startGame(){
-  document.getElementById('game').appendChild(app.canvas);
-  const stage = app.stage;
-  const VIEW_W = 1280, VIEW_H = 720;
+PIXI.settings.ALPHA_MODE = PIXI.ALPHA_MODES.UNPACK;
 
-  const camera = { x:0, y:0 };
-  const obstacles = [];
+const app = new PIXI.Application({
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
+    backgroundColor: 0x000000,
+});
+document.body.appendChild(app.view);
 
-  // Player
-  const player = new PIXI.Graphics();
-  player.beginFill(0x00ccff); player.drawRect(-12,-12,24,24); player.endFill();
-  player.worldX = 0; player.worldY = 0; player.speed = 260; player.hp = 100;
-  stage.addChild(player);
+const bgSound = new Audio("audio/background.mp3");
+bgSound.loop = true;
+bgSound.volume = 0.4;
 
-  // Entities
-  let enemies = [];
-  let bullets = [];
+const hitSound = new Audio("audio/hit.mp3");
+hitSound.volume = 0.8;
 
-  // Timers / difficulty
-  let spawnTimer = 0, spawnInterval = 900;
-  let shootTimer = 0, shootInterval = 180;
-  let obstacleTimer = 0, obstacleInterval = 7000; // spawn obstacles occasionally
-  let kills = 0, difficultyLevel = 1;
-  let maxEnemies = 12, baseEnemySpeed = 80, baseEnemyHP = 1;
+const deathSound = new Audio("audio/death.mp3");
+deathSound.volume = 0.8;
 
-  // Controls
-  const keys = {};
-  window.addEventListener('keydown', e => { keys[e.code] = true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault(); });
-  window.addEventListener('keyup', e => { keys[e.code] = false; });
-
-  // HUD
-  const hud = new PIXI.Text('', { fontFamily:'Arial', fontSize:18, fill:0xffffff }); hud.x = 8; hud.y = 8; stage.addChild(hud);
-  const centerText = new PIXI.Text('', { fontFamily:'Arial', fontSize:42, fill:0xffffff }); centerText.anchor.set(0.5); centerText.x = VIEW_W/2; centerText.y = VIEW_H/2; stage.addChild(centerText);
-
-  function worldToScreen(wx, wy){ return { x: wx - camera.x, y: wy - camera.y }; }
-
-  // Obstacles
-  function spawnObstacle(){
-    const angle = Math.random()*Math.PI*2;
-    const dist = 900 + Math.random()*1200;
-    const wx = player.worldX + Math.cos(angle)*dist;
-    const wy = player.worldY + Math.sin(angle)*dist;
-
-    const o = new PIXI.Graphics();
-    o.beginFill(0x228833); // greenish, distinct
-    const w = 60 + Math.random()*90;
-    const h = 60 + Math.random()*90;
-    o.drawRect(-w/2, -h/2, w, h);
-    o.endFill();
-    o.worldX = wx; o.worldY = wy; o.w = w; o.h = h;
-    obstacles.push(o);
-    stage.addChild(o);
-  }
-
-  // Spawn initial obstacles
-  for(let i=0;i<6;i++) spawnObstacle();
-
-  // Enemies
-  function spawnEnemy(){
-    if(enemies.length >= maxEnemies) return;
-    const ang = Math.random()*Math.PI*2;
-    const dist = 600 + Math.random()*300;
-    const ex = player.worldX + Math.cos(ang)*dist;
-    const ey = player.worldY + Math.sin(ang)*dist;
-
-    const g = new PIXI.Graphics(); g.beginFill(0xff4466); g.drawCircle(0,0,10 + Math.random()*8); g.endFill();
-    g.worldX = ex; g.worldY = ey;
-    g.speed = baseEnemySpeed + Math.random()*30 + (difficultyLevel-1)*14;
-    g.hp = Math.max(1, Math.round(baseEnemyHP + (difficultyLevel-1)*0.6 + Math.random()*0.6));
-    g.maxHp = g.hp;
-
-    enemies.push(g);
-    stage.addChild(g);
-  }
-
-  // Bullets
-  function createBullet(dirx, diry){
-    const ang = Math.atan2(diry, dirx) + (Math.random()-0.5)*0.12;
-    const nx = Math.cos(ang), ny = Math.sin(ang);
-    const b = new PIXI.Graphics(); b.beginFill(0xffff66); b.drawRect(-4,-4,8,8); b.endFill();
-    b.worldX = player.worldX; b.worldY = player.worldY; b.vx = nx*700; b.vy = ny*700; b.life = 1800; b.damage = 1;
-    bullets.push(b); stage.addChild(b);
-  }
-
-  function shootAtNearest(){
-    if(enemies.length===0){ for(let a=0;a<6;a++) createBullet(Math.cos(a/6*Math.PI*2), Math.sin(a/6*Math.PI*2)); return; }
-    let nearest=null, dmin=1e9;
-    for(const e of enemies){ const dx = e.worldX - player.worldX, dy = e.worldY - player.worldY; const d = dx*dx+dy*dy; if(d<dmin){ dmin=d; nearest=e; } }
-    const dx = nearest.worldX - player.worldX, dy = nearest.worldY - player.worldY; const len = Math.hypot(dx,dy)||1; createBullet(dx/len, dy/len);
-  }
-
-  function adjustDifficulty(){ difficultyLevel++; spawnInterval = Math.max(200, spawnInterval - 80); baseEnemySpeed += 12; baseEnemyHP += 0.4; maxEnemies += 3; }
-
-  let gameOver = false;
-  function doGameOver(){ gameOver = true; centerText.text = 'GAME OVER'; app.ticker.stop(); }
-
-  // Initial enemies
-  for(let i=0;i<6;i++) spawnEnemy();
-
-  // Main update
-  function update(dt){
-    if(gameOver) return;
-    const delta = dt/1000;
-
-    // Player input
-    let vx=0, vy=0;
-    if(keys['KeyW']||keys['ArrowUp']) vy-=1;
-    if(keys['KeyS']||keys['ArrowDown']) vy+=1;
-    if(keys['KeyA']||keys['ArrowLeft']) vx-=1;
-    if(keys['KeyD']||keys['ArrowRight']) vx+=1;
-    const m = Math.hypot(vx,vy)||1;
-
-    // Proposed new position
-    let newX = player.worldX + (vx/m)*player.speed*delta;
-    let newY = player.worldY + (vy/m)*player.speed*delta;
-
-    // Obstacle collision (AABB) - simple block
-    let blocked = false;
-    for(const o of obstacles){ if(newX > o.worldX - o.w/2 && newX < o.worldX + o.w/2 && newY > o.worldY - o.h/2 && newY < o.worldY + o.h/2){ blocked = true; break; } }
-    if(!blocked){ player.worldX = newX; player.worldY = newY; }
-
-    // Camera
-    camera.x = player.worldX - VIEW_W/2; camera.y = player.worldY - VIEW_H/2;
-
-    // Spawn timers
-    spawnTimer += dt; if(spawnTimer >= spawnInterval){ spawnTimer = 0; spawnEnemy(); }
-    shootTimer += dt; if(shootTimer >= shootInterval){ shootTimer = 0; shootAtNearest(); }
-    obstacleTimer += dt; if(obstacleTimer >= obstacleInterval){ obstacleTimer = 0; spawnObstacle(); }
-
-    // Update bullets
-    for(let i=bullets.length-1;i>=0;i--){
-      const b = bullets[i]; b.worldX += b.vx*delta; b.worldY += b.vy*delta; b.life -= dt;
-      // collision with obstacles
-      let destroyed = false;
-      for(const o of obstacles){ if(b.worldX > o.worldX - o.w/2 && b.worldX < o.worldX + o.w/2 && b.worldY > o.worldY - o.h/2 && b.worldY < o.worldY + o.h/2){ destroyed = true; break; } }
-      if(destroyed){ stage.removeChild(b); bullets.splice(i,1); continue; }
-
-      // remove if far or expired
-      const dxp = b.worldX - player.worldX, dyp = b.worldY - player.worldY;
-      if(b.life <= 0 || Math.hypot(dxp,dyp) > 3500){ stage.removeChild(b); bullets.splice(i,1); continue; }
-
-      // collision with enemies
-      for(let j=enemies.length-1;j>=0;j--){
-        const e = enemies[j]; const dx = b.worldX - e.worldX, dy = b.worldY - e.worldY; if(dx*dx+dy*dy < ( (e.width||20) )*( (e.width||20) )){
-          e.hp -= b.damage; stage.removeChild(b); bullets.splice(i,1);
-          if(e.hp <= 0){ stage.removeChild(e); enemies.splice(j,1); kills++; if(kills % 15 === 0) adjustDifficulty(); }
-          break;
-        }
-      }
-    }
-
-    // Update enemies
-    for(let i=enemies.length-1;i>=0;i--){
-      const e = enemies[i]; const dx = player.worldX - e.worldX, dy = player.worldY - e.worldY; const d = Math.hypot(dx,dy)||1;
-      const mx = (dx/d)*e.speed*delta, my = (dy/d)*e.speed*delta;
-      let ex = e.worldX + mx, ey = e.worldY + my;
-      // obstacle collision for enemies
-      let hitObstacle = false;
-      for(const o of obstacles){ if(ex > o.worldX - o.w/2 && ex < o.worldX + o.w/2 && ey > o.worldY - o.h/2 && ey < o.worldY + o.h/2){ hitObstacle = true; break; } }
-      if(!hitObstacle){ e.worldX = ex; e.worldY = ey; }
-
-      // remove if far
-      if(Math.hypot(e.worldX - player.worldX, e.worldY - player.worldY) > 7000){ stage.removeChild(e); enemies.splice(i,1); continue; }
-
-      // contact damage
-      const collisionDist = 18 + (e.width||20);
-      if(d < collisionDist){ const damagePerSecond = 8 + (difficultyLevel-1)*3; player.hp -= damagePerSecond*delta; const kb=20; player.worldX -= (dx/d)*kb*delta; player.worldY -= (dy/d)*kb*delta; player.tint = 0xff9999; setTimeout(()=>{ player.tint = 0xFFFFFF; }, 80); if(player.hp <= 0){ player.hp = 0; doGameOver(); } }
-    }
-
-    // Update render positions
-    player.x = player.worldX - camera.x; player.y = player.worldY - camera.y;
-    for(const o of obstacles){ const p = worldToScreen(o.worldX, o.worldY); o.x = p.x; o.y = p.y; }
-    for(const e of enemies){ const p = worldToScreen(e.worldX, e.worldY); e.x = p.x; e.y = p.y; }
-    for(const b of bullets){ const p = worldToScreen(b.worldX, b.worldY); b.x = p.x; b.y = p.y; }
-
-    hud.text = `HP: ${Math.round(player.hp)}  Kills: ${kills}  Enemies: ${enemies.length}  Difficulty: ${difficultyLevel}`;
-  }
-
-  app.ticker.add(() => { update(app.ticker.elapsedMS); });
+function setAllVolumes(vol) {
+    bgSound.volume = vol;
+    hitSound.volume = vol;
+    deathSound.volume = vol;
 }
+
+function tryPlayBackground() {
+    bgSound.play().catch(() => {
+        window.addEventListener("click", () => {
+            bgSound.play();
+        }, { once: true });
+    });
+}
+
+const STATE = {
+    MENU: "menu",
+    VOLUME: "volume",
+    PLAYING: "playing",
+    GAMEOVER: "gameover",
+};
+let currentState = STATE.MENU;
+
+let player, enemies = [], obstacles = [], projectiles = [];
+let kills = 0, difficulty = 0, spawnDelay = 100, nextSpawn = 0;
+let elapsedTime = 0, score = 0;
+let camX = 0, camY = 0;
+
+const menuContainer = new PIXI.Container();
+const volumeContainer = new PIXI.Container();
+const gameContainer = new PIXI.Container();
+const hudContainer = new PIXI.Container();
+const gameOverContainer = new PIXI.Container();
+
+app.stage.addChild(menuContainer);
+app.stage.addChild(volumeContainer);
+app.stage.addChild(gameContainer);
+app.stage.addChild(hudContainer);
+app.stage.addChild(gameOverContainer);
+
+menuContainer.visible = true;
+volumeContainer.visible = false;
+gameContainer.visible = false;
+hudContainer.visible = false;
+gameOverContainer.visible = false;
+
+const style = new PIXI.TextStyle({
+    fill: "#ffffff",
+    fontSize: 24,
+    fontWeight: "bold",
+    stroke: '#000000',
+    strokeThickness: 3,
+});
+
+const menuTitle = new PIXI.Text("🧛 Vampire Survivors PIXI 🧛", {
+    fill: "#ff4444",
+    fontSize: 48,
+    fontWeight: "bold",
+    stroke: '#000000',
+    strokeThickness: 5,
+});
+menuTitle.anchor.set(0.5);
+menuTitle.x = GAME_WIDTH / 2;
+menuTitle.y = GAME_HEIGHT / 3;
+menuContainer.addChild(menuTitle);
+
+function createButton(text, y, onClick) {
+    const btn = new PIXI.Container();
+    const bg = new PIXI.Graphics();
+    bg.beginFill(0x880000);
+    bg.drawRoundedRect(0, 0, 300, 60, 15);
+    bg.endFill();
+
+    const label = new PIXI.Text(text, {
+        fill: "#fff",
+        fontSize: 28,
+        fontWeight: "bold",
+    });
+    label.anchor.set(0.5);
+    label.x = 150;
+    label.y = 30;
+
+    btn.addChild(bg);
+    btn.addChild(label);
+
+    btn.x = (GAME_WIDTH - 300) / 2;
+    btn.y = y;
+
+    btn.interactive = true;
+    btn.buttonMode = true;
+    btn.on('pointerdown', onClick);
+
+    return btn;
+}
+
+const playBtn = createButton("▶ Jogar", GAME_HEIGHT / 2, () => {
+    resetGame();
+    switchToState(STATE.PLAYING);
+});
+menuContainer.addChild(playBtn);
+
+const volumeBtn = createButton("🔊 Volumes", GAME_HEIGHT / 2 + 80, () => {
+    switchToState(STATE.VOLUME);
+});
+menuContainer.addChild(volumeBtn);
+
+
+const volumeTitle = new PIXI.Text("Controle de Volume", {
+    fill: "#44aa44",
+    fontSize: 40,
+    fontWeight: "bold",
+    stroke: '#000000',
+    strokeThickness: 4,
+});
+volumeTitle.anchor.set(0.5);
+volumeTitle.x = GAME_WIDTH / 2;
+volumeTitle.y = 100;
+volumeContainer.addChild(volumeTitle);
+
+const volumeDisplay = new PIXI.Text("", style);
+volumeDisplay.anchor.set(0.5);
+volumeDisplay.x = GAME_WIDTH / 2;
+volumeDisplay.y = 180;
+volumeContainer.addChild(volumeDisplay);
+
+let volumeLevel = 0.4;
+
+function updateVolumeText() {
+    volumeDisplay.text = `Volume: ${Math.round(volumeLevel * 100)}%`;
+}
+updateVolumeText();
+
+const volDownBtn = createButton("🔉 Diminuir", GAME_HEIGHT / 2 - 30, () => {
+    volumeLevel = Math.max(0, volumeLevel - 0.1);
+    setAllVolumes(volumeLevel);
+    updateVolumeText();
+});
+volumeContainer.addChild(volDownBtn);
+
+const volUpBtn = createButton("🔊 Aumentar", GAME_HEIGHT / 2 + 50, () => {
+    volumeLevel = Math.min(1, volumeLevel + 0.1);
+    setAllVolumes(volumeLevel);
+    updateVolumeText();
+});
+volumeContainer.addChild(volUpBtn);
+
+const volBackBtn = createButton("⬅ Voltar", GAME_HEIGHT / 2 + 130, () => {
+    switchToState(STATE.MENU);
+});
+volumeContainer.addChild(volBackBtn);
+
+
+const hpText = new PIXI.Text("HP: 100", style);
+hpText.position.set(20, 20);
+hudContainer.addChild(hpText);
+
+const timeText = new PIXI.Text("Tempo: 0s", style);
+timeText.position.set(GAME_WIDTH / 2 - 50, 20);
+hudContainer.addChild(timeText);
+
+const scoreText = new PIXI.Text("Score: 0", style);
+scoreText.position.set(GAME_WIDTH - 180, 20);
+hudContainer.addChild(scoreText);
+
+
+const gameOverBg = new PIXI.Graphics();
+gameOverBg.beginFill(0x550000, 0.85);
+gameOverBg.drawRoundedRect(0, 0, GAME_WIDTH, GAME_HEIGHT, 20);
+gameOverBg.endFill();
+gameOverContainer.addChild(gameOverBg);
+
+const gameOverText = new PIXI.Text("💀 GAME OVER 💀", {
+    fill: "#ff5555",
+    fontSize: 72,
+    fontWeight: "bold",
+    stroke: "#000000",
+    strokeThickness: 8,
+});
+gameOverText.anchor.set(0.5);
+gameOverText.x = GAME_WIDTH / 2;
+gameOverText.y = GAME_HEIGHT / 3;
+gameOverContainer.addChild(gameOverText);
+
+const finalScoreText = new PIXI.Text("", {
+    fill: "#ffffff",
+    fontSize: 32,
+    fontWeight: "bold",
+    stroke: "#000000",
+    strokeThickness: 5,
+});
+finalScoreText.anchor.set(0.5);
+finalScoreText.x = GAME_WIDTH / 2;
+finalScoreText.y = GAME_HEIGHT / 2.2;
+gameOverContainer.addChild(finalScoreText);
+
+const replayBtn = createButton("🔄 Jogar Novamente", GAME_HEIGHT / 2 + 100, () => {
+    resetGame();
+    switchToState(STATE.PLAYING);
+});
+gameOverContainer.addChild(replayBtn);
+
+
+PIXI.Assets.load([
+    "sprites/background.png",
+    "sprites/inimigos.png",
+    "sprites/obstaculo.png",
+    "sprites/projetil.png",
+    "sprites/protag.png"
+]).then(initGame);
+
+let gameData = null;
+
+
+function switchToState(newState) {
+    currentState = newState;
+
+    menuContainer.visible = false;
+    volumeContainer.visible = false;
+    gameContainer.visible = false;
+    hudContainer.visible = false;
+    gameOverContainer.visible = false;
+
+    if (newState === STATE.MENU) {
+        menuContainer.visible = true;
+        stopGameSounds();
+    } else if (newState === STATE.VOLUME) {
+        volumeContainer.visible = true;
+    } else if (newState === STATE.PLAYING) {
+        gameContainer.visible = true;
+        hudContainer.visible = true;
+        tryPlayBackground();
+    } else if (newState === STATE.GAMEOVER) {
+        gameOverContainer.visible = true;
+        finalScoreText.text = `Sua pontuação final foi:\n${Math.floor(score)}`;
+        stopGameSounds();
+        deathSound.currentTime = 0;
+        deathSound.play();
+    }
+}
+
+function stopGameSounds() {
+    bgSound.pause();
+    bgSound.currentTime = 0;
+    hitSound.pause();
+    hitSound.currentTime = 0;
+    deathSound.pause();
+    deathSound.currentTime = 0;
+}
+
+function initGame() {
+    const texBackground = PIXI.Texture.from("sprites/background.png");
+    const bg = new PIXI.TilingSprite(texBackground, GAME_WIDTH, GAME_HEIGHT);
+    bg.scale.set(1.0);
+    gameContainer.addChild(bg);
+
+    const texProtag = PIXI.Texture.from("sprites/protag.png");
+    player = new PIXI.Sprite(texProtag);
+    player.anchor.set(0.5);
+    player.scale.set(0.45);
+    player.speed = 4;
+    player.worldX = 0;
+    player.worldY = 0;
+    player.hp = 100;
+    gameContainer.addChild(player);
+
+    const texEnemies = PIXI.Texture.from("sprites/inimigos.png");
+    const texObstacle = PIXI.Texture.from("sprites/obstaculo.png");
+    const texProjectile = PIXI.Texture.from("sprites/projetil.png");
+
+    enemies = [];
+    obstacles = [];
+    projectiles = [];
+
+    function createEnemy() {
+        const type = Math.floor(Math.random() * 4);
+        const ENEMY_FRAME_W = texEnemies.width / 4;
+        const t = new PIXI.Texture(
+            texEnemies.baseTexture,
+            new PIXI.Rectangle(type * ENEMY_FRAME_W, 0, ENEMY_FRAME_W, texEnemies.height)
+        );
+        const e = new PIXI.Sprite(t);
+        e.anchor.set(0.5);
+        e.scale.set(0.55);
+
+        e.worldX = player.worldX + (600 + Math.random() * 300) * (Math.random() < 0.5 ? -1 : 1);
+        e.worldY = player.worldY + (600 + Math.random() * 300) * (Math.random() < 0.5 ? -1 : 1);
+
+        e.speed = 1.2 + difficulty * 0.25;
+        e.hp = 10 + difficulty * 4;
+
+        enemies.push(e);
+        gameContainer.addChild(e);
+    }
+
+    function spawnObstacle() {
+        const o = new PIXI.Sprite(texObstacle);
+        o.anchor.set(0.5);
+        o.scale.set(0.7);
+        o.size = 64;
+
+        o.worldX = player.worldX + (300 + Math.random() * 700) * (Math.random() < 0.5 ? -1 : 1);
+        o.worldY = player.worldY + (300 + Math.random() * 700) * (Math.random() < 0.5 ? -1 : 1);
+
+        obstacles.push(o);
+        gameContainer.addChild(o);
+    }
+
+    for (let i = 0; i < 8; i++) spawnObstacle();
+
+    function getClosestEnemy() {
+        let best = null;
+        let bd = Infinity;
+        for (const e of enemies) {
+            const d = Math.hypot(e.worldX - player.worldX, e.worldY - player.worldY);
+            if (d < bd) { best = e; bd = d; }
+        }
+        return best;
+    }
+
+    function fireProjectile() {
+        if (currentState !== STATE.PLAYING) return;
+
+        const target = getClosestEnemy();
+
+        let ang, vx, vy;
+
+        if (!target) {
+            ang = Math.random() * Math.PI * 2;
+            vx = Math.cos(ang) * 8;
+            vy = Math.sin(ang) * 8;
+        } else {
+            const dx = target.worldX - player.worldX;
+            const dy = target.worldY - player.worldY;
+            ang = Math.atan2(dy, dx);
+
+            const d = Math.hypot(dx, dy);
+            vx = dx / d * 8;
+            vy = dy / d * 8;
+        }
+
+        const p = new PIXI.Sprite(texProjectile);
+        p.anchor.set(0.5);
+        p.scale.set(0.28);
+        p.rotation = ang;
+
+        p.worldX = player.worldX;
+        p.worldY = player.worldY;
+
+        p.vx = vx;
+        p.vy = vy;
+        p.life = 90;
+
+        projectiles.push(p);
+        gameContainer.addChild(p);
+    }
+
+    gameData = {
+        createEnemy,
+        spawnObstacle,
+        fireProjectile,
+    };
+
+    setInterval(() => {
+        if (currentState === STATE.PLAYING) gameData.fireProjectile();
+    }, 300);
+}
+
+function resetGame() {
+    kills = 0;
+    difficulty = 0;
+    spawnDelay = 100;
+    nextSpawn = 0;
+    elapsedTime = 0;
+    score = 0;
+    camX = 0;
+    camY = 0;
+
+    player.hp = 100;
+    player.worldX = 0;
+    player.worldY = 0;
+
+    for (const e of enemies) gameContainer.removeChild(e);
+    for (const o of obstacles) gameContainer.removeChild(o);
+    for (const p of projectiles) gameContainer.removeChild(p);
+
+    enemies.length = 0;
+    obstacles.length = 0;
+    projectiles.length = 0;
+
+    for (let i = 0; i < 8; i++) gameData.spawnObstacle();
+}
+
+function updateCamera() {
+    camX = player.worldX - GAME_WIDTH / 2;
+    camY = player.worldY - GAME_HEIGHT / 2;
+
+    if(gameContainer.children.length > 0 && gameContainer.children[0] instanceof PIXI.TilingSprite){
+        gameContainer.children[0].tilePosition.x = -camX * 0.25;
+        gameContainer.children[0].tilePosition.y = -camY * 0.25;
+    }
+}
+
+const keys = {};
+window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+app.ticker.add(() => {
+    if (currentState !== STATE.PLAYING) return;
+
+    elapsedTime += app.ticker.elapsedMS / 1000;
+
+    let dx = 0, dy = 0;
+    if (keys["w"] || keys["arrowup"]) dy -= 1;
+    if (keys["s"] || keys["arrowdown"]) dy += 1;
+    if (keys["a"] || keys["arrowleft"]) dx -= 1;
+    if (keys["d"] || keys["arrowright"]) dx += 1;
+
+    const moving = dx !== 0 || dy !== 0;
+
+    if (moving) {
+        const l = Math.hypot(dx, dy);
+        dx /= l; dy /= l;
+        player.worldX += dx * player.speed;
+        player.worldY += dy * player.speed;
+    }
+
+    for (const o of obstacles) {
+        const hw = o.size / 2;
+        if (Math.abs(player.worldX - o.worldX) < hw + 20 &&
+            Math.abs(player.worldY - o.worldY) < hw + 20) {
+            player.worldX -= dx * player.speed;
+            player.worldY -= dy * player.speed;
+        }
+    }
+
+    nextSpawn--;
+    if (nextSpawn <= 0) {
+        nextSpawn = spawnDelay;
+        gameData.createEnemy();
+    }
+
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+
+        const ax = player.worldX - e.worldX;
+        const ay = player.worldY - e.worldY;
+        const d = Math.hypot(ax, ay);
+
+        e.worldX += (ax / d) * e.speed;
+        e.worldY += (ay / d) * e.speed;
+
+        for (const o of obstacles) {
+            const hw = o.size / 2;
+            const cx = Math.max(o.worldX - hw, Math.min(e.worldX, o.worldX + hw));
+            const cy = Math.max(o.worldY - hw, Math.min(e.worldY, o.worldY + hw));
+            if ((e.worldX - cx) ** 2 + (e.worldY - cy) ** 2 < 20 * 20) {
+                e.worldX -= (ax / d) * e.speed;
+                e.worldY -= (ay / d) * e.speed;
+            }
+        }
+
+        if (d < 28) player.hp -= 0.1;
+
+        if (e.hp <= 0) {
+            gameContainer.removeChild(e);
+            enemies.splice(i, 1);
+            kills++;
+
+            score += 100 + elapsedTime * 10;
+
+            hitSound.currentTime = 0;
+            hitSound.play();
+
+            const dif = Math.floor(kills / 15);
+            if (dif > difficulty) {
+                difficulty = dif;
+                spawnDelay = Math.max(20, 100 - difficulty * 8);
+            }
+        }
+    }
+
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+
+        p.worldX += p.vx;
+        p.worldY += p.vy;
+        p.life--;
+
+        let destroy = false;
+
+        for (const o of obstacles) {
+            const hw = o.size / 2;
+            const cx = Math.max(o.worldX - hw, Math.min(p.worldX, o.worldX + hw));
+            const cy = Math.max(o.worldY - hw, Math.min(p.worldY, o.worldY + hw));
+            if ((p.worldX - cx) ** 2 + (p.worldY - cy) ** 2 < 10 * 10) {
+                destroy = true;
+                break;
+            }
+        }
+
+        if (!destroy) {
+            for (const e of enemies) {
+                if (Math.hypot(p.worldX - e.worldX, p.worldY - e.worldY) < 28) {
+                    e.hp -= 10;
+                    destroy = true;
+                    break;
+                }
+            }
+        }
+
+        if (destroy || p.life <= 0) {
+            gameContainer.removeChild(p);
+            projectiles.splice(i, 1);
+        }
+    }
+
+    updateCamera();
+
+    player.x = player.worldX - camX;
+    player.y = player.worldY - camY;
+
+    for (const e of enemies) {
+        e.x = e.worldX - camX;
+        e.y = e.worldY - camY;
+    }
+
+    for (const o of obstacles) {
+        o.x = o.worldX - camX;
+        o.y = o.worldY - camY;
+    }
+
+    for (const p of projectiles) {
+        p.x = p.worldX - camX;
+        p.y = p.worldY - camY;
+    }
+
+    hpText.text = `HP: ${Math.max(0, Math.floor(player.hp))}`;
+    timeText.text = `Tempo: ${Math.floor(elapsedTime)}s`;
+    scoreText.text = `Score: ${Math.floor(score)}`;
+
+    if (player.hp <= 0) {
+        switchToState(STATE.GAMEOVER);
+    }
+});
 </script>
 </body>
 </html>
