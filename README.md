@@ -1,43 +1,32 @@
-# PIXIJS Survivors
-Um jogo estilo Vampire Survivors feito com PIXI.js, onde você controla um personagem que atira automaticamente em inimigos que se aproximam. Sobreviva o máximo que puder, aumente sua pontuação eliminando inimigos, e aproveite uma experiência simples, leve e viciante!
----
-## Recursos
-- Movimento com WASD ou setas
-- Disparo automático em inimigos próximos
-- Inimigos e obstáculos gerados aleatoriamente
-- HUD com HP, tempo e pontuação dinâmicos
-- Tela inicial com menu para jogar e ajustar volume
-- Tela de Game Over estilizada com opção de jogar novamente
-- Controle de volume para sons do jogo
----
-## Requisitos
-- Navegador moderno (Chrome, Firefox, Edge, Safari)
-- Servidor HTTP local para evitar problemas de carregamento de assets
----
-## Como rodar localmente
-1. Clone ou baixe este repositório
+# Knight Platform Game — Project workspace
 
-git clone https://github.com/seuusuario/PIXIJS-Survivors.git
+O projeto foi reorganizado: o código do jogo foi movido para `src/game.js` e a página HTML principal está em `2.html`.
 
-cd barbarian
+O que eu fiz:
+- Separei o JavaScript do HTML: o arquivo `2.html` agora carrega `src/game.js` (PIXI).
+- Integrei sprites e animações existentes (pastas `knight/` e `fruts/`) usando PIXI.AnimatedSprite.
 
-2. Inicie um servidor HTTP local na pasta do projeto
+Como testar localmente
+1. Abra um servidor estático na pasta do projeto (recomendado — alguns navegadores bloqueiam carregar imagens via file://):
 
-npx http-server
+   - Com Python (se instalado):
 
-3. Acesse o jogo
+     ```powershell
+     python -m http.server 8000
+     ```
 
-o CMD irá retornar alguns endereços locais, basta acessar um deles e jogar!
----
-## Como jogar
-- Use WASD ou as setas para mover o personagem.
-- O personagem atira automaticamente nos inimigos mais próximos.
-- Sobreviva o máximo possível enquanto elimina inimigos para aumentar sua pontuação.
-- Use o menu inicial para iniciar o jogo ou ajustar o volume.
-- Na tela de Game Over, você pode clicar em "Jogar Novamente" para reiniciar.
----
-### Licença
-Este projeto é aberto e livre para uso pessoal e aprendizado.
----
+   - Ou com Node (http-server):
 
-Divirta-se! 🎮🧛‍♂️
+     ```powershell
+     npx http-server -p 8000
+     ```
+
+2. Abra no navegador: http://localhost:8000/2.html
+
+Nota
+- Arquivos originais com animações baseadas em Canvas (em `knight/*.js` e `fruts/*.js`) foram mantidos. O novo `src/game.js` usa PIXI para facilitar animações e manipulação de sprites.
+
+Se quiser, eu posso:
+- Ajustar tamanhos/frames das sprites caso encontre diferenças visuais
+- Consolidar os scripts antigos (canvas) para uso em páginas de demonstração separadas
+- Adicionar controles para alternar animações do cavaleiro manualmente (idle/run/hit/death)

@@ -1,30 +1,422 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-<meta charset="UTF-8" />
-<title>PIXIJS Survivors</title>
-<style>
-    html, body {
-        height: 100%;
-    }
-    body {
-        margin: 0;
-        overflow: hidden;
-        background: #000;
-        font-family: Arial, sans-serif;
-    }
-    canvas {
-        display: block;
-        margin: 0 auto;
-        /* Make the canvas scale to fill the viewport (keeps internal PIXI resolution but visually fullscreen) */
-        width: 100vw;
-        height: 100vh;
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knight Animations</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        h1 {
+            color: #fff;
+            margin-bottom: 20px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+            background-color: #333;
+            padding: 30px;
+            border-radius: 10px;
+        }
+        .animation-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            background-color: #444;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .animation-box h2 {
+            color: #4CAF50;
+            margin: 0;
+            font-size: 18px;
+        }
+        .animation-box canvas {
+            border: 2px solid #4CAF50;
+            background-color: #111;
+            border-radius: 5px;
+        }
+        button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        .nav-btn {
+            padding: 10px 20px;
+            background-color: #FF6B6B;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .nav-btn:hover {
+            background-color: #FF5252;
+        }
+        .section {
+            display: none;
+        }
+        .section.active {
+            display: block;
+        }
+        .fruit-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            background-color: #333;
+            padding: 30px;
+            border-radius: 10px;
+        }
+        .fruit-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            background-color: #444;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .fruit-box h2 {
+            color: #FFD700;
+            margin: 0;
+            font-size: 18px;
+        }
+        .fruit-box canvas {
+            border: 2px solid #FFD700;
+            background-color: #111;
+            border-radius: 5px;
+        }
+        .fruit-btn {
+            background-color: #FFD700;
+            color: #222;
+            margin-top: 10px;
+            padding: 8px 16px;
+            font-weight: bold;
+        }
+        .fruit-btn:hover {
+            background-color: #FFC700;
+        }
+    </style>
 </head>
 <body>
+    <h1>⚔️ Knight Animations ⚔️</h1>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
-<script src="js/game.js"></script>
+    <!-- Game HUB: botão PLAY para iniciar o jogo principal -->
+    <div style="width:100%; display:flex; justify-content:center; margin-bottom:16px;">
+        <a href="2.html" style="text-decoration:none;">
+            <button style="padding:18px 36px; font-size:20px; border-radius:12px; background:linear-gradient(90deg,#6ee7b7,#34d399); color:#043927; font-weight:700; border:2px solid rgba(255,255,255,0.08);">▶️ PLAY</button>
+        </a>
+    </div>
+    
+    <div class="nav-buttons">
+        <button class="nav-btn" onclick="showSection('knight')">🛡️ Knight</button>
+        <button class="nav-btn" onclick="showSection('fruits')">🍎 Fruits</button>
+    </div>
+    
+    <div id="knight" class="section active">
+        <div class="container">
+        <div class="animation-box">
+            <h2>Idle</h2>
+            <canvas id="idle-canvas"></canvas>
+            <button onclick="loadAnimation('idle')">Carregar Idle</button>
+        </div>
+        
+        <div class="animation-box">
+            <h2>Walk</h2>
+            <canvas id="walk-canvas"></canvas>
+            <button onclick="loadAnimation('walk')">Carregar Walk</button>
+        </div>
+        
+        <div class="animation-box">
+            <h2>Run</h2>
+            <canvas id="run-canvas"></canvas>
+            <button onclick="loadAnimation('run')">Carregar Run</button>
+        </div>
+        
+        <div class="animation-box">
+            <h2>Attack</h2>
+            <canvas id="attack-canvas"></canvas>
+            <button onclick="loadAnimation('attack')">Carregar Attack</button>
+        </div>
+
+        <div class="animation-box">
+            <h2>Death</h2>
+            <canvas id="death-canvas"></canvas>
+            <button onclick="loadAnimation('death')">Carregar Death</button>
+        </div>
+
+        <div class="animation-box">
+            <h2>Hit</h2>
+            <canvas id="hit-canvas"></canvas>
+            <button onclick="loadAnimation('hit')">Carregar Hit</button>
+        </div>
+    </div>
+
+    <div id="fruits" class="section">
+        <div class="fruit-container">
+            <div class="fruit-box">
+                <h2>🟡 Amarela</h2>
+                <canvas id="yellon-canvas"></canvas>
+                <button class="fruit-btn" onclick="loadFruit('yellon')">Carregar Amarela</button>
+            </div>
+            
+            <div class="fruit-box">
+                <h2>🔴 Vermelha</h2>
+                <canvas id="red-canvas"></canvas>
+                <button class="fruit-btn" onclick="loadFruit('red')">Carregar Vermelha</button>
+            </div>
+            
+            <div class="fruit-box">
+                <h2>🟣 Roxa</h2>
+                <canvas id="purple-canvas"></canvas>
+                <button class="fruit-btn" onclick="loadFruit('purple')">Carregar Roxa</button>
+            </div>
+            
+            <div class="fruit-box">
+                <h2>🟢 Verde</h2>
+                <canvas id="green-canvas"></canvas>
+                <button class="fruit-btn" onclick="loadFruit('green')">Carregar Verde</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showSection(section) {
+            const sections = document.querySelectorAll('.section');
+            sections.forEach(s => s.classList.remove('active'));
+            document.getElementById(section).classList.add('active');
+        }
+
+        const animations = {
+            idle: {
+                frameWidth: 32,
+                frameHeight: 30,
+                totalFrames: 8,
+                frameDuration: 150,
+                src: "knight/idle.png"
+            },
+            walk: {
+                frameWidth: 32,
+                frameHeight: 30,
+                totalFrames: 8,
+                frameDuration: 100,
+                src: "knight/walk.png"
+            },
+            run: {
+                frameWidth: 32,
+                frameHeight: 30,
+                totalFrames: 8,
+                frameDuration: 75,
+                src: "knight/run.png"
+            },
+            attack: {
+                frameWidth: 32,
+                frameHeight: 30,
+                totalFrames: 8,
+                frameDuration: 80,
+                src: "knight/attack.png"
+            },
+            death: {
+                frameWidth: 32,
+                frameHeight: 30,
+                totalFrames: 6,
+                frameDuration: 120,
+                src: "knight/death.png"
+            },
+            hit: {
+                frameWidth: 32,
+                frameHeight: 30,
+                totalFrames: 4,
+                frameDuration: 100,
+                src: "knight/hit.png"
+            }
+        };
+
+        const scale = 3;
+        let currentAnimations = {};
+
+        function loadAnimation(animationName) {
+            const canvas = document.getElementById(`${animationName}-canvas`);
+            const config = animations[animationName];
+
+            // Se já existe animação, remover
+            if (currentAnimations[animationName]) {
+                currentAnimations[animationName].stop = true;
+            }
+
+            const sprite = new Image();
+            sprite.src = config.src;
+
+            canvas.width = config.frameWidth * scale;
+            canvas.height = config.frameHeight * scale;
+
+            const ctx = canvas.getContext("2d");
+            let currentFrame = 0;
+            let lastFrameTime = 0;
+            let stop = false;
+
+            function animate(timestamp) {
+                if (stop) return;
+
+                if (timestamp - lastFrameTime >= config.frameDuration) {
+                    currentFrame = (currentFrame + 1) % config.totalFrames;
+                    lastFrameTime = timestamp;
+                }
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                ctx.drawImage(
+                    sprite,
+                    currentFrame * config.frameWidth,
+                    0,
+                    config.frameWidth,
+                    config.frameHeight,
+                    0,
+                    0,
+                    config.frameWidth * scale,
+                    config.frameHeight * scale
+                );
+
+                requestAnimationFrame(animate);
+            }
+
+            sprite.onload = () => {
+                console.log(`Sprite ${animationName} carregado com sucesso!`);
+                requestAnimationFrame(animate);
+                currentAnimations[animationName] = { stop: false };
+            };
+
+            sprite.onerror = () => {
+                console.error(`Erro ao carregar o sprite: ${config.src}`);
+            };
+        }
+
+        // Carregar a animação de idle ao carregar a página
+        window.addEventListener('load', () => {
+            loadAnimation('idle');
+            initFruits();
+        });
+
+        const fruits = {
+            yellon: {
+                frameWidth: 32,
+                frameHeight: 32,
+                totalFrames: 4,
+                frameDuration: 250,
+                src: "fruts/yellon/fruit_yellon.png"
+            },
+            red: {
+                frameWidth: 32,
+                frameHeight: 32,
+                totalFrames: 4,
+                frameDuration: 250,
+                src: "fruts/red/fruit_red.png"
+            },
+            purple: {
+                frameWidth: 32,
+                frameHeight: 32,
+                totalFrames: 4,
+                frameDuration: 250,
+                src: "fruts/purple/fruit_purple.png"
+            },
+            green: {
+                frameWidth: 32,
+                frameHeight: 32,
+                totalFrames: 4,
+                frameDuration: 250,
+                src: "fruts/green/fruit_green.png"
+            }
+        };
+
+        let currentFruits = {};
+        const fruitScale = 2;
+
+        function initFruits() {
+            loadFruit('yellon');
+        }
+
+        function loadFruit(fruitName) {
+            const canvas = document.getElementById(`${fruitName}-canvas`);
+            const config = fruits[fruitName];
+
+            if (!canvas) return;
+
+            // Se já existe animação, remover
+            if (currentFruits[fruitName]) {
+                currentFruits[fruitName].stop = true;
+            }
+
+            const sprite = new Image();
+            sprite.src = config.src;
+
+            canvas.width = config.frameWidth * fruitScale;
+            canvas.height = config.frameHeight * fruitScale;
+
+            const ctx = canvas.getContext("2d");
+            let currentFrame = 0;
+            let lastFrameTime = 0;
+            let stop = false;
+
+            function animate(timestamp) {
+                if (stop) return;
+
+                if (timestamp - lastFrameTime >= config.frameDuration) {
+                    currentFrame = (currentFrame + 1) % config.totalFrames;
+                    lastFrameTime = timestamp;
+                }
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                ctx.drawImage(
+                    sprite,
+                    currentFrame * config.frameWidth,
+                    0,
+                    config.frameWidth,
+                    config.frameHeight,
+                    0,
+                    0,
+                    config.frameWidth * fruitScale,
+                    config.frameHeight * fruitScale
+                );
+
+                requestAnimationFrame(animate);
+            }
+
+            sprite.onload = () => {
+                console.log(`Fruta ${fruitName} carregada com sucesso!`);
+                requestAnimationFrame(animate);
+                currentFruits[fruitName] = { stop: false };
+            };
+
+            sprite.onerror = () => {
+                console.error(`Erro ao carregar a fruta: ${config.src}`);
+            };
+        }
+    </script>
 </body>
 </html>

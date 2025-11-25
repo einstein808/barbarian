@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mini Platformer (PixiJS)</title>
+  <style>
+    html,body{height:100%;margin:0;background:#111;color:#fff;font-family:Arial}
+    #game-root{width:100%;height:100vh;display:flex;align-items:center;justify-content:center}
+    .hud{position:absolute;left:16px;top:16px;color:#fff}
+    .info{font-size:14px}
+  </style>
+</head>
+<body>
+  <div id="game-root"></div>
+  <div class="hud">
+    <div class="info">Use A / D para mover, Espaço para pular</div>
+  </div>
+
+  <!-- PixiJS CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.2.4/pixi.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
